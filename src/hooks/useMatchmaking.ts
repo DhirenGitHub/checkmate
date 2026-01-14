@@ -66,7 +66,12 @@ export function useMatchmaking({
       } else if (payload.type === 'handshake-ack' && payload.odaId) {
         onPartnerFound(payload.odaId);
       } else if (payload.type === 'message' && payload.message) {
-        onMessageReceived(payload.message);
+        // Message received from peer - flip the sender perspective
+        const receivedMessage: StoredMessage = {
+          ...payload.message,
+          sender: 'peer',
+        };
+        onMessageReceived(receivedMessage);
       } else if (payload.type === 'sync-request' && userData) {
         // Partner is asking for our message history
         conn.send({ type: 'sync-response', messages: userData.messages });
