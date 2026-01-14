@@ -1,9 +1,15 @@
-import { useState, useRef, useEffect } from 'react';
-import { usePeerChat } from '../hooks/usePeerChat';
-import type { Message } from '../hooks/usePeerChat';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { useStorage } from '../hooks/useStorage';
+import { useMatchmaking } from '../hooks/useMatchmaking';
+import type { Gender, StoredMessage } from '../hooks/useStorage';
 
-function MessageBubble({ message }: { message: Message }) {
+interface MessageBubbleProps {
+  message: StoredMessage;
+}
+
+function MessageBubble({ message }: MessageBubbleProps) {
   const isMe = message.sender === 'me';
+  const time = new Date(message.timestamp);
 
   return (
     <div className={`flex ${isMe ? 'justify-end' : 'justify-start'} mb-3`}>
@@ -16,142 +22,62 @@ function MessageBubble({ message }: { message: Message }) {
       >
         <p className="break-words">{message.text}</p>
         <p className={`text-xs mt-1 ${isMe ? 'text-blue-200' : 'text-gray-400'}`}>
-          {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </p>
       </div>
     </div>
   );
 }
 
-function ConnectionScreen({
-  onCreateRoom,
-  onJoinRoom,
-  error,
-}: {
-  onCreateRoom: () => void;
-  onJoinRoom: (roomId: string) => void;
-  error: string | null;
-}) {
-  const [joinRoomId, setJoinRoomId] = useState('');
+interface GenderSelectionProps {
+  onSelect: (gender: Gender) => void;
+}
 
-  const handleJoin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (joinRoomId.trim()) {
-      onJoinRoom(joinRoomId.trim());
-    }
-  };
-
+function GenderSelection({ onSelect }: GenderSelectionProps) {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 p-4">
-      <div className="w-full max-w-md">
-        <h1 className="text-4xl font-bold text-white text-center mb-2">Checkmate</h1>
-        <p className="text-gray-400 text-center mb-8">Peer-to-peer chat, no servers needed</p>
-
-        {error && (
-          <div className="bg-red-900/50 border border-red-500 text-red-200 px-4 py-3 rounded-lg mb-6">
-            {error}
-          </div>
-        )}
-
-        <div className="bg-gray-800 rounded-xl p-6 mb-4">
-          <h2 className="text-xl font-semibold text-white mb-4">Create a Room</h2>
-          <p className="text-gray-400 text-sm mb-4">
-            Start a new chat room and share the code with your friend
-          </p>
-          <button
-            onClick={onCreateRoom}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition-colors"
-          >
-            Create Room
-          </button>
-        </div>
-
-        <div className="flex items-center gap-4 mb-4">
-          <div className="flex-1 h-px bg-gray-700"></div>
-          <span className="text-gray-500 text-sm">or</span>
-          <div className="flex-1 h-px bg-gray-700"></div>
-        </div>
+      <div className="w-full max-w-md text-center">
+        <h1 className="text-4xl font-bold text-white mb-2">Checkmate</h1>
+        <p className="text-gray-400 mb-8">Anonymous chat with a stranger</p>
 
         <div className="bg-gray-800 rounded-xl p-6">
-          <h2 className="text-xl font-semibold text-white mb-4">Join a Room</h2>
-          <p className="text-gray-400 text-sm mb-4">
-            Enter the room code shared by your friend
-          </p>
-          <form onSubmit={handleJoin} className="flex gap-2">
-            <input
-              type="text"
-              value={joinRoomId}
-              onChange={(e) => setJoinRoomId(e.target.value.toUpperCase())}
-              placeholder="Enter room code"
-              className="flex-1 bg-gray-700 border border-gray-600 text-white placeholder-gray-400 px-4 py-3 rounded-lg focus:outline-none focus:border-blue-500"
-              maxLength={6}
-            />
+          <h2 className="text-xl font-semibold text-white mb-6">Select your gender</h2>
+
+          <div className="flex gap-4">
             <button
-              type="submit"
-              disabled={!joinRoomId.trim()}
-              className="bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-3 px-6 rounded-lg transition-colors"
+              onClick={() => onSelect('male')}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-4 px-6 rounded-lg transition-colors"
             >
-              Join
+              <span className="text-2xl mb-2 block">♂</span>
+              Male
             </button>
-          </form>
+            <button
+              onClick={() => onSelect('female')}
+              className="flex-1 bg-pink-600 hover:bg-pink-700 text-white font-medium py-4 px-6 rounded-lg transition-colors"
+            >
+              <span className="text-2xl mb-2 block">♀</span>
+              Female
+            </button>
+          </div>
+
+          <p className="text-gray-500 text-sm mt-6">
+            You'll be matched with someone of the opposite gender
+          </p>
         </div>
       </div>
     </div>
   );
 }
 
-function WaitingScreen({ roomId }: { roomId: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const copyToClipboard = async () => {
-    try {
-      await navigator.clipboard.writeText(roomId);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Fallback for older browsers
-      const textArea = document.createElement('textarea');
-      textArea.value = roomId;
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textArea);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 p-4">
-      <div className="bg-gray-800 rounded-xl p-8 max-w-md w-full text-center">
-        <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
-        <h2 className="text-2xl font-bold text-white mb-2">Waiting for connection...</h2>
-        <p className="text-gray-400 mb-6">Share this room code with your friend:</p>
-
-        <div className="bg-gray-900 rounded-lg p-4 mb-4">
-          <p className="text-3xl font-mono font-bold text-blue-400 tracking-wider">{roomId}</p>
-        </div>
-
-        <button
-          onClick={copyToClipboard}
-          className="bg-gray-700 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg transition-colors"
-        >
-          {copied ? 'Copied!' : 'Copy Code'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function ChatScreen({
-  messages,
-  onSendMessage,
-  roomId,
-}: {
-  messages: Message[];
+interface ChatScreenProps {
+  messages: StoredMessage[];
   onSendMessage: (text: string) => void;
-  roomId: string;
-}) {
+  isConnected: boolean;
+  isSearching: boolean;
+  partnerGender: Gender | null;
+}
+
+function ChatScreen({ messages, onSendMessage, isConnected, isSearching, partnerGender }: ChatScreenProps) {
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -172,20 +98,50 @@ function ChatScreen({
       {/* Header */}
       <div className="bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold text-white">Checkmate Chat</h1>
-          <p className="text-xs text-gray-400">Room: {roomId}</p>
+          <h1 className="text-lg font-semibold text-white">Checkmate</h1>
+          <p className="text-xs text-gray-400">
+            {partnerGender ? `Chatting with a ${partnerGender}` : 'Anonymous chat'}
+          </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-          <span className="text-sm text-green-400">Connected</span>
+          {isSearching && !isConnected ? (
+            <>
+              <span className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></span>
+              <span className="text-sm text-yellow-400">Searching...</span>
+            </>
+          ) : isConnected ? (
+            <>
+              <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+              <span className="text-sm text-green-400">Online</span>
+            </>
+          ) : (
+            <>
+              <span className="w-2 h-2 bg-gray-500 rounded-full"></span>
+              <span className="text-sm text-gray-400">Offline</span>
+            </>
+          )}
         </div>
       </div>
+
+      {/* Status banner */}
+      {!isConnected && (
+        <div className={`px-4 py-2 text-center text-sm ${isSearching ? 'bg-yellow-900/30 text-yellow-300' : 'bg-gray-800 text-gray-400'}`}>
+          {isSearching ? (
+            <>Looking for your match... You can send messages while waiting!</>
+          ) : (
+            <>Your partner is offline. Messages will be delivered when they return.</>
+          )}
+        </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4">
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full">
-            <p className="text-gray-500">No messages yet. Say hello!</p>
+            <div className="text-center">
+              <p className="text-gray-500 mb-2">No messages yet</p>
+              <p className="text-gray-600 text-sm">Send a message to start the conversation!</p>
+            </div>
           </div>
         ) : (
           <>
@@ -220,36 +176,78 @@ function ChatScreen({
   );
 }
 
-export function Chat() {
-  const {
-    connectionStatus,
-    messages,
-    createRoom,
-    joinRoom,
-    sendMessage,
-    roomId,
-    error,
-  } = usePeerChat();
+function LoadingScreen() {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900">
+      <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+      <p className="text-gray-400 mt-4">Loading...</p>
+    </div>
+  );
+}
 
-  if (connectionStatus === 'connected' && roomId) {
-    return (
-      <ChatScreen
-        messages={messages}
-        onSendMessage={sendMessage}
-        roomId={roomId}
-      />
-    );
+export function Chat() {
+  const { userData, isLoading, initializeUser, setPartner, addMessage, getOppositeGender } = useStorage();
+  const [messages, setMessages] = useState<StoredMessage[]>([]);
+
+  // Initialize messages from storage
+  useEffect(() => {
+    if (userData?.messages) {
+      setMessages(userData.messages);
+    }
+  }, [userData?.messages]);
+
+  const handlePartnerFound = useCallback((partnerId: string) => {
+    setPartner(partnerId);
+  }, [setPartner]);
+
+  const handleMessageReceived = useCallback((message: StoredMessage) => {
+    // Check if message already exists to avoid duplicates
+    setMessages((prev) => {
+      if (prev.some((m) => m.id === message.id)) {
+        return prev;
+      }
+      return [...prev, message];
+    });
+    addMessage(message);
+  }, [addMessage]);
+
+  const { isSearching, isConnected, sendMessage, connectionError } = useMatchmaking({
+    userData,
+    onPartnerFound: handlePartnerFound,
+    onMessageReceived: handleMessageReceived,
+  });
+
+  const handleSendMessage = useCallback((text: string) => {
+    const message = sendMessage(text);
+    if (message) {
+      setMessages((prev) => [...prev, message]);
+      addMessage(message);
+    }
+  }, [sendMessage, addMessage]);
+
+  const handleGenderSelect = useCallback((gender: Gender) => {
+    initializeUser(gender);
+  }, [initializeUser]);
+
+  if (isLoading) {
+    return <LoadingScreen />;
   }
 
-  if (connectionStatus === 'waiting' && roomId) {
-    return <WaitingScreen roomId={roomId} />;
+  if (!userData) {
+    return <GenderSelection onSelect={handleGenderSelect} />;
+  }
+
+  if (connectionError) {
+    console.error('Connection error:', connectionError);
   }
 
   return (
-    <ConnectionScreen
-      onCreateRoom={createRoom}
-      onJoinRoom={joinRoom}
-      error={error}
+    <ChatScreen
+      messages={messages}
+      onSendMessage={handleSendMessage}
+      isConnected={isConnected}
+      isSearching={isSearching}
+      partnerGender={getOppositeGender()}
     />
   );
 }
