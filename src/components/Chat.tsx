@@ -186,15 +186,8 @@ function LoadingScreen() {
 }
 
 export function Chat() {
-  const { userData, isLoading, initializeUser, setPartner, addMessage, getOppositeGender } = useStorage();
+  const { userData, isLoading, initializeUser, setPartner, getOppositeGender } = useStorage();
   const [messages, setMessages] = useState<StoredMessage[]>([]);
-
-  // Initialize messages from storage
-  useEffect(() => {
-    if (userData?.messages) {
-      setMessages(userData.messages);
-    }
-  }, [userData?.messages]);
 
   const handlePartnerFound = useCallback((partnerId: string) => {
     setPartner(partnerId);
@@ -208,8 +201,7 @@ export function Chat() {
       }
       return [...prev, message];
     });
-    addMessage(message);
-  }, [addMessage]);
+  }, []);
 
   const { isSearching, isConnected, sendMessage, connectionError } = useMatchmaking({
     userData,
@@ -221,9 +213,8 @@ export function Chat() {
     const message = sendMessage(text);
     if (message) {
       setMessages((prev) => [...prev, message]);
-      addMessage(message);
     }
-  }, [sendMessage, addMessage]);
+  }, [sendMessage]);
 
   const handleGenderSelect = useCallback((gender: Gender) => {
     initializeUser(gender);
