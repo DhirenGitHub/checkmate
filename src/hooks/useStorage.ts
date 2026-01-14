@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 
 export type Gender = 'male' | 'female';
 
@@ -16,7 +16,7 @@ export interface UserData {
   messages: StoredMessage[];
 }
 
-const STORAGE_KEY = 'checkmate_user';
+// const STORAGE_KEY = 'checkmate_user';
 
 function generateUserId(): string {
   return `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -24,22 +24,23 @@ function generateUserId(): string {
 
 export function useStorage() {
   const [userData, setUserData] = useState<UserData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading] = useState(false); // No loading needed without storage
 
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        setUserData(JSON.parse(stored));
-      } catch {
-        setUserData(null);
-      }
-    }
-    setIsLoading(false);
-  }, []);
+  // COMMENTED OUT: localStorage persistence for easier testing
+  // useEffect(() => {
+  //   const stored = localStorage.getItem(STORAGE_KEY);
+  //   if (stored) {
+  //     try {
+  //       setUserData(JSON.parse(stored));
+  //     } catch {
+  //       setUserData(null);
+  //     }
+  //   }
+  //   setIsLoading(false);
+  // }, []);
 
   const saveUserData = useCallback((data: UserData) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    // localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     setUserData(data);
   }, []);
 
