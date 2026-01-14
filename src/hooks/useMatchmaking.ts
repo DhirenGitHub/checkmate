@@ -33,11 +33,18 @@ export function useMatchmaking({
   const peerRef = useRef<Peer | null>(null);
   const connectionRef = useRef<DataConnection | null>(null);
   const searchIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isConnectedRef = useRef(false); // Track connection state in ref for callbacks
 
   const setupConnectionHandlers = useCallback((conn: DataConnection, isInitiator: boolean) => {
+    // Don't replace an existing working connection
+    if (isConnectedRef.current && connectionRef.current) {
+      return;
+    }
+
     connectionRef.current = conn;
 
-    conn.on('open', () => {
+    const handleOpen = () => {
+      isConnectedRef.current = true;
       setIsConnected(true);
       setIsSearching(false);
       setConnectionError(null);
@@ -52,9 +59,9 @@ export function useMatchmaking({
       if (isInitiator && userData) {
         conn.send({ type: 'handshake', odaId: userData.odaId });
       }
-    });
+    };
 
-    conn.on('data', (data) => {
+    const handleData = (data: unknown) => {
       const payload = data as { type: string; odaId?: string; message?: StoredMessage };
 
       if (payload.type === 'handshake' && payload.odaId) {
@@ -72,43 +79,32 @@ export function useMatchmaking({
           sender: 'peer',
         };
         onMessageReceived(receivedMessage);
-      } else if (payload.type === 'sync-request' && userData) {
-        // Partner is asking for our message history
-        conn.send({ type: 'sync-response', messages: userData.messages });
-      } else if (payload.type === 'sync-response') {
-        // Receive partner's message history
-        const syncData = data as { type: string; messages: StoredMessage[] };
-        syncData.messages.forEach((msg: StoredMessage) => {
-          // Only add messages from peer that we don't have
-          if (msg.sender === 'me') {
-            const peerMsg: StoredMessage = { ...msg, sender: 'peer' };
-            onMessageReceived(peerMsg);
-          }
-        });
       }
-    });
+    };
 
-    conn.on('close', () => {
+    const handleClose = () => {
+      isConnectedRef.current = false;
       setIsConnected(false);
       connectionRef.current = null;
-    });
+    };
 
-    conn.on('error', (err) => {
+    const handleError = (err: Error) => {
       console.error('Connection error:', err);
-    });
+    };
+
+    conn.on('open', handleOpen);
+    conn.on('data', handleData);
+    conn.on('close', handleClose);
+    conn.on('error', handleError);
+
+    // If connection is already open (for incoming connections), trigger open handler
+    if (conn.open) {
+      handleOpen();
+    }
   }, [userData, onPartnerFound, onMessageReceived]);
 
-  const connectToPartner = useCallback((partnerId: string) => {
-    if (!peerRef.current || !userData) return;
-
-    // Try to connect to partner's peer ID
-    const peerIdToConnect = `checkmate-${partnerId}`;
-    const conn = peerRef.current.connect(peerIdToConnect, { reliable: true });
-    setupConnectionHandlers(conn, true);
-  }, [userData, setupConnectionHandlers]);
-
   const searchForPartner = useCallback(() => {
-    if (!peerRef.current || !userData) return;
+    if (!peerRef.current || !userData || isConnectedRef.current) return;
 
     const oppositeGender = userData.odad === 'male' ? 'female' : 'male';
     const targetChannel = getChannelId(oppositeGender);
@@ -117,7 +113,9 @@ export function useMatchmaking({
     const conn = peerRef.current.connect(targetChannel, { reliable: true });
 
     conn.on('open', () => {
-      setupConnectionHandlers(conn, true);
+      if (!isConnectedRef.current) {
+        setupConnectionHandlers(conn, true);
+      }
     });
 
     conn.on('error', () => {
@@ -128,39 +126,6 @@ export function useMatchmaking({
   // Initialize peer and start matchmaking
   useEffect(() => {
     if (!userData) return;
-
-    // If we already have a partner, try to connect directly to them
-    if (userData.partnerId) {
-      const peer = new Peer(`checkmate-${userData.odaId}`);
-      peerRef.current = peer;
-
-      peer.on('open', () => {
-        connectToPartner(userData.partnerId!);
-        setIsSearching(true);
-      });
-
-      peer.on('connection', (conn) => {
-        setupConnectionHandlers(conn, false);
-      });
-
-      peer.on('error', (err) => {
-        if (err.type !== 'peer-unavailable') {
-          setConnectionError(`Connection error: ${err.message}`);
-        }
-      });
-
-      // Retry connecting to partner periodically
-      searchIntervalRef.current = setInterval(() => {
-        if (!isConnected && userData.partnerId) {
-          connectToPartner(userData.partnerId);
-        }
-      }, 3000);
-
-      return () => {
-        if (searchIntervalRef.current) clearInterval(searchIntervalRef.current);
-        peer.destroy();
-      };
-    }
 
     // No partner yet - join matchmaking queue
     const myChannel = getChannelId(userData.odad);
@@ -208,8 +173,9 @@ export function useMatchmaking({
     return () => {
       if (searchIntervalRef.current) clearInterval(searchIntervalRef.current);
       peerRef.current?.destroy();
+      isConnectedRef.current = false;
     };
-  }, [userData?.odaId, userData?.partnerId, userData?.odad]);
+  }, [userData?.odaId, userData?.odad, searchForPartner, setupConnectionHandlers]);
 
   const sendMessage = useCallback((text: string): StoredMessage | null => {
     const message: StoredMessage = {
@@ -220,12 +186,12 @@ export function useMatchmaking({
     };
 
     // Send if connected
-    if (connectionRef.current && isConnected) {
+    if (connectionRef.current && connectionRef.current.open) {
       connectionRef.current.send({ type: 'message', message });
     }
 
     return message;
-  }, [isConnected]);
+  }, []);
 
   return {
     isSearching,
